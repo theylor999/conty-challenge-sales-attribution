@@ -98,7 +98,7 @@ export class SalesService {
     return {
       id: orderId,
       status: order ? "known" : "awaiting_order",
-      order: order && {
+      order: order ? {
         name: order.name,
         currency: order.currency,
         total_cents: order.total_cents,
@@ -106,13 +106,13 @@ export class SalesService {
         cancelled_at: order.cancelled_at,
         created_at: order.created_at,
         received_at: order.received_at,
-      },
-      attribution: order && {
+      } : null,
+      attribution: order ? {
         creator_id: order.creator_id,
         rule: order.rule,
         evidence: JSON.parse(order.evidence) as unknown,
         conflicts: JSON.parse(order.conflicts) as unknown,
-      },
+      } : null,
       totals: summarize(ledger),
       ledger,
       refunds,
