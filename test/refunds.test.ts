@@ -97,7 +97,8 @@ describe("repeated refund", () => {
   it("concurrent copies of one refund apply once", async () => {
     const h = createHarness();
     await h.sendOrder(ana);
-    await Promise.all(Array.from({ length: 8 }, () => h.sendRefund(refund({}, "30.00"))));
+    const results = await Promise.all(Array.from({ length: 8 }, () => h.sendRefund(refund({}, "30.00"))));
+    expect(results.map((r) => r.body.status).sort()).toEqual(["applied", ...Array(7).fill("duplicate_refund")]);
     expect((await h.get("/orders/1001")).body.totals.refunded_cents).toBe(3000);
   });
 });

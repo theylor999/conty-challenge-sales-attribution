@@ -52,6 +52,7 @@ describe("order ingestion", () => {
   it("identical deliveries fired at the same time record one sale", async () => {
     const h = createHarness();
     const results = await Promise.all(Array.from({ length: 10 }, (_, i) => h.sendOrder(order({ discount_codes: [{ code: "BIA15" }] }), `burst-${i}`)));
+    expect(results.map((r) => r.status)).toEqual([201, ...Array(9).fill(200)]);
     expect(results.filter((r) => r.body.status === "created")).toHaveLength(1);
     expect((await h.get("/creators/cr_bia/sales")).body.totals[0]).toMatchObject({ orders: 1, gross_cents: 10000 });
   });
