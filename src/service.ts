@@ -94,11 +94,18 @@ export class SalesService {
     const refunds = refundsForOrder(this.db, orderId);
     if (!order && refunds.length === 0) return null;
 
-    const ledger = ledgerForOrder(this.db, orderId);
+    const base = {
+      totals: summarize(ledgerForOrder(this.db, orderId)),
+      ledger: ledgerForOrder(this.db, orderId),
+      refunds,
+      pending_refunds: refunds.filter((refund) => refund.status === "pending"),
+    };
+    if (!order) return { id: orderId, status: "awaiting_order" as const, order: null, attribution: null, ...base };
+
     return {
       id: orderId,
-      status: order ? "known" : "awaiting_order",
-      order: order ? {
+      status: "known" as const,
+      order: {
         name: order.name,
         currency: order.currency,
         total_cents: order.total_cents,
@@ -106,17 +113,14 @@ export class SalesService {
         cancelled_at: order.cancelled_at,
         created_at: order.created_at,
         received_at: order.received_at,
-      } : null,
-      attribution: order ? {
+      },
+      attribution: {
         creator_id: order.creator_id,
         rule: order.rule,
         evidence: JSON.parse(order.evidence) as unknown,
         conflicts: JSON.parse(order.conflicts) as unknown,
-      } : null,
-      totals: summarize(ledger),
-      ledger,
-      refunds,
-      pending_refunds: refunds.filter((refund) => refund.status === "pending"),
+      },
+      ...base,
     };
   }
 
