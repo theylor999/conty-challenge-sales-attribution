@@ -93,7 +93,7 @@ export class Db {
 
   constructor(path: string) {
     this.db = new DatabaseSync(path);
-    this.db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+    this.db.exec("PRAGMA foreign_keys = ON; PRAGMA recursive_triggers = ON; PRAGMA busy_timeout = 5000;");
     // The pragma ignores busy_timeout, so skip it when another process already switched the file to WAL.
     if (path !== ":memory:" && this.db.prepare("PRAGMA journal_mode").get()?.journal_mode !== "wal") {
       this.db.exec("PRAGMA journal_mode = WAL;");

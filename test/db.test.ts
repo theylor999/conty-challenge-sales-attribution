@@ -47,6 +47,12 @@ describe("database guarantees", () => {
     expect(() => db.run("DELETE FROM ledger_entries")).toThrow(/append-only/);
   });
 
+  it("is append-only against INSERT OR REPLACE too", () => {
+    entry("refund", -9000, "r1");
+    expect(() => db.run("INSERT OR REPLACE INTO ledger_entries (order_id, kind, amount_cents, occurred_at, recorded_at) VALUES ('o1', 'sale', 100, 't', 't')")).toThrow(/append-only/);
+    expect(db.get<{ total: number }>("SELECT SUM(amount_cents) AS total FROM ledger_entries")!.total).toBe(1000);
+  });
+
   it("rolls the whole transaction back on error", () => {
     expect(() =>
       db.transaction(() => {
