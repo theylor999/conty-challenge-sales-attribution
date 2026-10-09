@@ -42,6 +42,7 @@ export function parseRefundPayload(body: unknown): RefundInput {
     if (tx.kind !== "refund") continue;
     if (tx.status !== undefined && tx.status !== "success") continue;
     amountCents += asMoney(tx.amount, "transactions[].amount");
+    if (!Number.isSafeInteger(amountCents)) throw new PayloadError("refund amount is too large");
     if (tx.currency != null) currencies.add(asCurrency(tx.currency, "transactions[].currency"));
   }
   if (currencies.size > 1) throw new PayloadError("refund mixes currencies");
@@ -90,8 +91,9 @@ function asIso(value: unknown, field: string): string {
   if (match) {
     const [year, month, day, hour, minute, second] = match.slice(1, 7).map((part) => Number(part ?? 0)) as [number, number, number, number, number, number];
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    if (month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth && hour <= 23 && minute <= 59 && second <= 59) {
-      return new Date(value as string).toISOString();
+    const date = new Date(value as string);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth && hour <= 23 && minute <= 59 && second <= 59 && !Number.isNaN(date.getTime())) {
+      return date.toISOString();
     }
   }
   throw new PayloadError(`${field} must be an ISO 8601 timestamp with a timezone offset`);

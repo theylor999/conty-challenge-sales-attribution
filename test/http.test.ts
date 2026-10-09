@@ -13,6 +13,7 @@ describe("input validation", () => {
     ["created_at in prose", { created_at: "March 5, 2026" }],
     ["created_at on a day that does not exist", { created_at: "2026-02-30T10:00:00Z" }],
     ["created_at without timezone", { created_at: "2026-03-10T10:00:00" }],
+    ["created_at with an impossible offset", { created_at: "2026-03-10T10:00:00+24:00" }],
     ["cancelled_at that is not a date", { cancelled_at: "soon" }],
   ])("order: rejects %s with 422", async (_name, patch) => {
     const h = createHarness();
@@ -27,6 +28,8 @@ describe("input validation", () => {
     ["amount as number", { transactions: [{ amount: 10, kind: "refund" }] }],
     ["missing order_id", { order_id: undefined }],
     ["bad created_at", { created_at: "2026-13-01T00:00:00Z" }],
+    ["created_at with an impossible offset", { created_at: "2026-03-12T09:00:00+24:00" }],
+    ["transaction amounts that add up past the safe integer range", { transactions: Array.from({ length: 11 }, () => ({ amount: "9999999999999.99", kind: "refund", currency: "BRL" })) }],
     ["mixed currencies", { transactions: [{ amount: "1.00", kind: "refund", currency: "BRL" }, { amount: "1.00", kind: "refund", currency: "USD" }] }],
   ])("refund: rejects %s with 422", async (_name, patch) => {
     const res = await createHarness().sendRefund(refund(patch));
