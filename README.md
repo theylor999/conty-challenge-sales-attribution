@@ -158,7 +158,7 @@ Bia (UTM do pedido 1001) não recebe nada: `GET /creators/cr_bia/sales` devolve 
 
 ## Uso de IA
 
-O código e os testes foram escritos com um assistente de IA (Claude), que eu dirigi: defini as regras e li cada arquivo. O que eu revisei e ajustei:
+Usei mais de um modelo de IA, cada um num papel: Claude Opus 5.5 para planejar, dividir o trabalho e conferir as entregas; Claude Sonnet 5.5 para escrever o código e os testes; e GPT-6.1 Sol para uma revisão independente contra o enunciado, cujos achados válidos entraram como correção. Eu dirigi o processo, defini as regras, li cada arquivo e revisei o resultado. O que eu revisei e ajustei:
 
 - Prioridade cupom sobre UTM e a lista de candidatos que alimenta `conflicts`: conferi que a regra existe em um só lugar e que o teste de ponta a ponta bate com o teste da função.
 - Teto de estorno: decidi aplicar até o saldo e guardar o excedente, em vez de recusar o estorno inteiro, e pedi o trigger no banco além da checagem no serviço.
