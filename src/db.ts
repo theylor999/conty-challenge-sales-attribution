@@ -17,9 +17,10 @@ CREATE TABLE IF NOT EXISTS creator_handles (
 );
 
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
-  delivery_id TEXT PRIMARY KEY,
   topic       TEXT NOT NULL,
-  received_at TEXT NOT NULL
+  delivery_id TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  PRIMARY KEY (topic, delivery_id)
 );
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -93,7 +94,10 @@ export class Db {
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-    if (path !== ":memory:") this.db.exec("PRAGMA journal_mode = WAL;");
+    // The pragma ignores busy_timeout, so skip it when another process already switched the file to WAL.
+    if (path !== ":memory:" && this.db.prepare("PRAGMA journal_mode").get()?.journal_mode !== "wal") {
+      this.db.exec("PRAGMA journal_mode = WAL;");
+    }
     this.db.exec(SCHEMA);
   }
 

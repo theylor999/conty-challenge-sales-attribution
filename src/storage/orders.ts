@@ -47,7 +47,7 @@ export interface RefundRow {
 
 /** Returns false when the delivery id was already seen. */
 export function recordDelivery(db: Db, deliveryId: string, topic: string, receivedAt: string): boolean {
-  return db.run("INSERT OR IGNORE INTO webhook_deliveries (delivery_id, topic, received_at) VALUES (?, ?, ?)", deliveryId, topic, receivedAt).changes === 1;
+  return db.run("INSERT OR IGNORE INTO webhook_deliveries (topic, delivery_id, received_at) VALUES (?, ?, ?)", topic, deliveryId, receivedAt).changes === 1;
 }
 
 export const findOrder = (db: Db, id: string): OrderRow | undefined => db.get("SELECT * FROM orders WHERE id = ?", id);

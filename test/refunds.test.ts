@@ -111,7 +111,7 @@ describe("refund cap", () => {
     expect(second.body).toMatchObject({ status: "capped", refund: { requested_cents: 5000, applied_cents: 3000, excess_cents: 2000, reason: "exceeds_remaining" } });
 
     const third = await h.sendRefund(refund({ id: 3 }, "1.00"));
-    expect(third.body).toMatchObject({ status: "rejected", refund: { applied_cents: 0, excess_cents: 100 } });
+    expect(third.body).toMatchObject({ status: "rejected", refund: { applied_cents: 0, excess_cents: 100, reason: "nothing_left" } });
 
     const view = (await h.get("/orders/1001")).body;
     expect(view.totals).toMatchObject({ refunded_cents: 10000, net_cents: 0 });
@@ -139,7 +139,7 @@ describe("refund cap", () => {
     const h = createHarness();
     await h.sendOrder(order({ landing_site: "/?utm_content=ana", cancelled_at: "2026-03-10T11:00:00Z" }));
     const res = await h.sendRefund(refund({}, "10.00"));
-    expect(res.body).toMatchObject({ status: "rejected", refund: { excess_cents: 1000 } });
+    expect(res.body).toMatchObject({ status: "rejected", refund: { excess_cents: 1000, reason: "nothing_left" } });
     expect((await h.get("/orders/1001")).body.totals).toMatchObject({ reversed_cents: 10000, refunded_cents: 0, net_cents: 0 });
   });
 });

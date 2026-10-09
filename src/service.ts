@@ -171,7 +171,7 @@ export class SalesService {
   private settleRefund(order: OrderRef, refund: RefundRow, now: string): void {
     const mismatch = refund.currency !== null && refund.currency !== order.currency;
     const plan = mismatch
-      ? { status: "rejected" as const, appliedCents: 0, excessCents: refund.requested_cents }
+      ? { status: "rejected" as const, appliedCents: 0, excessCents: refund.requested_cents, reason: "currency_mismatch" }
       : planRefund(orderNetCents(this.db, order.id), refund.requested_cents);
 
     if (plan.appliedCents > 0) {
@@ -189,7 +189,7 @@ export class SalesService {
       status: plan.status,
       appliedCents: plan.appliedCents,
       excessCents: plan.excessCents,
-      reason: mismatch ? "currency_mismatch" : plan.excessCents > 0 ? "exceeds_remaining" : null,
+      reason: plan.reason,
       resolvedAt: now,
     });
   }

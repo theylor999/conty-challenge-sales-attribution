@@ -3,16 +3,16 @@ import { isCancelled, planRefund, summarize } from "../src/domain/ledger.ts";
 
 describe("planRefund", () => {
   it("applies a refund that fits", () => {
-    expect(planRefund(10000, 3000)).toEqual({ status: "applied", appliedCents: 3000, excessCents: 0 });
+    expect(planRefund(10000, 3000)).toEqual({ status: "applied", appliedCents: 3000, excessCents: 0, reason: null });
   });
   it("applies exactly the remaining amount", () => {
-    expect(planRefund(7000, 7000)).toEqual({ status: "applied", appliedCents: 7000, excessCents: 0 });
+    expect(planRefund(7000, 7000)).toEqual({ status: "applied", appliedCents: 7000, excessCents: 0, reason: null });
   });
   it("caps at the remaining amount and keeps the excess", () => {
-    expect(planRefund(7000, 8000)).toEqual({ status: "capped", appliedCents: 7000, excessCents: 1000 });
+    expect(planRefund(7000, 8000)).toEqual({ status: "capped", appliedCents: 7000, excessCents: 1000, reason: "exceeds_remaining" });
   });
   it("rejects when nothing is left", () => {
-    expect(planRefund(0, 500)).toEqual({ status: "rejected", appliedCents: 0, excessCents: 500 });
+    expect(planRefund(0, 500)).toEqual({ status: "rejected", appliedCents: 0, excessCents: 500, reason: "nothing_left" });
   });
 });
 

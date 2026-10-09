@@ -82,8 +82,17 @@ function asCurrency(value: unknown, field: string): string {
   return value.toUpperCase();
 }
 
+const ISO = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+// Date alone accepts "1" or "2026-02-30" (rolled to March), so the shape and calendar are checked first.
 function asIso(value: unknown, field: string): string {
-  const date = typeof value === "string" ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) throw new PayloadError(`${field} must be an ISO 8601 timestamp`);
-  return date.toISOString();
+  const match = typeof value === "string" ? ISO.exec(value) : null;
+  if (match) {
+    const [year, month, day, hour, minute, second] = match.slice(1, 7).map((part) => Number(part ?? 0)) as [number, number, number, number, number, number];
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth && hour <= 23 && minute <= 59 && second <= 59) {
+      return new Date(value as string).toISOString();
+    }
+  }
+  throw new PayloadError(`${field} must be an ISO 8601 timestamp with a timezone offset`);
 }

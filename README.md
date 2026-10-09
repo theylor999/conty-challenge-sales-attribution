@@ -9,7 +9,7 @@ Stack: Node 22+, TypeScript estrito, Hono, `node:sqlite`, vitest. Não precisa d
 ```bash
 npm install
 npm run dev          # http://localhost:3000, banco em data/sales.db, criadores já semeados
-npm test             # 102 testes
+npm test             # 110 testes
 npm run typecheck
 ```
 
@@ -32,7 +32,7 @@ Criadores semeados (`src/seed.ts`):
 | `GET /orders/:id` | Atribuição com evidência e conflitos, totais, ledger completo, estornos e pendentes. |
 | `GET /creators/:id/sales` | Bruto, estornado, revertido e líquido por moeda, mais a lista de pedidos. |
 
-Erros: `401` assinatura inválida, `400` JSON inválido, `422` payload inválido (por exemplo `total_price` numérico ou com 3 casas).
+Erros: `401` assinatura inválida, `400` JSON inválido, `422` payload inválido (por exemplo `total_price` numérico ou com 3 casas, ou `created_at` fora do formato ISO 8601 com fuso).
 
 Valores ficam em centavos inteiros (`*_cents`). `total_price` e `amount` chegam como string decimal e são lidos sem ponto flutuante (`"199.90"` vira `19990`). A moeda é gravada por pedido, e os totais do criador nunca somam moedas diferentes.
 
@@ -65,7 +65,7 @@ A atribuição é congelada na primeira vez que o pedido chega. Pedido repetido 
 
 Duas camadas, as duas dentro da mesma transação do processamento:
 
-- `X-Shopify-Webhook-Id` (a mesma entrega repetida): tabela `webhook_deliveries` com chave primária. Repetição devolve `duplicate_delivery` e não faz nada. Se o processamento falha, a transação desfaz e o id não é gasto, então o reenvio funciona. O header é opcional; sem ele só vale a camada seguinte.
+- `X-Shopify-Webhook-Id` (a mesma entrega repetida): tabela `webhook_deliveries` com chave primária `(tópico, id)`. Repetição devolve `duplicate_delivery` e não faz nada. Se o processamento falha, a transação desfaz e o id não é gasto, então o reenvio funciona. O header é opcional; sem ele só vale a camada seguinte.
 - Chave de negócio (o mesmo pedido em uma entrega nova): `orders.id` e `refunds.refund_id` são únicos. Pedido repetido devolve `duplicate_order` sem novo lançamento. Estorno repetido devolve o registro original, mesmo que o valor do reenvio seja outro.
 
 O banco reforça o resto: um índice único permite uma `sale` por pedido, um `reversal` por pedido e um lançamento por estorno. `BEGIN IMMEDIATE` serializa gravações, também entre processos.
@@ -78,7 +78,7 @@ Ids da Shopify de 64 bits passam de 2^53; o corpo é lido com esses ids como tex
 
 - **Estorno parcial**: lança `refund` negativo; a `sale` continua lá. Várias transações `kind: "refund"` com `status` `success` (ou sem status) no mesmo estorno são somadas; outras são ignoradas. Estorno sem valor (só reposição de estoque) devolve `200 ignored`.
 - **Estorno repetido**: mesmo `refund_id` não gera lançamento novo.
-- **Teto**: a soma dos estornos aplicados nunca passa do valor da venda. Estorno acima do saldo é aplicado só até o saldo (`status: capped`, `applied_cents`) e o excedente fica em `excess_cents` com `reason: exceeds_remaining`. Sem saldo, `status: rejected`. Escolhi aplicar até o teto em vez de recusar tudo porque o estorno aconteceu de fato na loja, e o excedente continua rastreável. Um trigger no banco garante que o líquido do pedido nunca fica abaixo de zero.
+- **Teto**: a soma dos estornos aplicados nunca passa do valor da venda. Estorno acima do saldo é aplicado só até o saldo (`status: capped`, `applied_cents`) e o excedente fica em `excess_cents` com `reason: exceeds_remaining`. Sem saldo, `status: rejected` com `reason: nothing_left`. Escolhi aplicar até o teto em vez de recusar tudo porque o estorno aconteceu de fato na loja, e o excedente continua rastreável. Um trigger no banco garante que o líquido do pedido nunca fica abaixo de zero.
 - **Estorno antes do pedido**: fica `pending` com `received_at` e aparece em `GET /orders/:id` (`status: awaiting_order`). Quando o pedido chega, os pendentes são aplicados na mesma transação, por `created_at` (não por ordem de chegada), respeitando o teto. O mesmo estorno chegando duas vezes antes do pedido vale uma vez.
 - **Moeda**: estorno em moeda diferente da do pedido é `rejected` com `reason: currency_mismatch`.
 - **Cancelamento**: pedido com `cancelled_at` ou `financial_status: voided`, na chegada ou em atualização posterior, ganha um `reversal` do que ainda sobra (uma vez só). Cancelado não volta a ativo por webhook velho. Estorno que chega depois do cancelamento fica `rejected` (nada sobrou).
@@ -137,7 +137,7 @@ Bia (UTM do pedido 1001) não recebe nada: `GET /creators/cr_bia/sales` devolve 
 
 ## Testes
 
-`npm test` (102 testes, vitest, banco em memória, relógio injetado):
+`npm test` (110 testes, vitest, banco em memória, relógio injetado):
 
 - `attribution.test.ts`: a função pura, incluindo a tabela de desempate.
 - `orders.test.ts`: pedido duplicado (mesma entrega e entrega nova), rajada concorrente, desempate de ponta a ponta, sem sinal, atribuição congelada, cancelamento.
@@ -163,4 +163,5 @@ Escrevi o código e os testes com um assistente de programação (Claude), que e
 - Prioridade cupom sobre UTM e a lista de candidatos que alimenta `conflicts`: conferi que a regra existe em um só lugar e que o teste de ponta a ponta bate com o teste da função.
 - Teto de estorno: decidi aplicar até o saldo e guardar o excedente, em vez de recusar o estorno inteiro, e pedi o trigger no banco além da checagem no serviço.
 - Ids de 64 bits da Shopify e `1001` contra `"1001"`: conferi que o mesmo pedido não vira dois.
+- Datas: depois de uma revisão independente, troquei o `new Date(texto)` solto por ISO 8601 com fuso e dia de calendário válido (`"1"` e `"2026-02-30T..."` passavam), e escopei o id de entrega por tópico.
 - Pedido que chega já cancelado e cancelamento depois de estorno parcial: revisei a conta do `reversal` para cobrir só o que sobra.

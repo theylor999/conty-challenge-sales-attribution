@@ -9,6 +9,11 @@ describe("input validation", () => {
     ["missing id", { id: undefined }],
     ["bad currency", { currency: "REAL" }],
     ["bad created_at", { created_at: "yesterday" }],
+    ["created_at without date shape", { created_at: "1" }],
+    ["created_at in prose", { created_at: "March 5, 2026" }],
+    ["created_at on a day that does not exist", { created_at: "2026-02-30T10:00:00Z" }],
+    ["created_at without timezone", { created_at: "2026-03-10T10:00:00" }],
+    ["cancelled_at that is not a date", { cancelled_at: "soon" }],
   ])("order: rejects %s with 422", async (_name, patch) => {
     const h = createHarness();
     const res = await h.sendOrder(order(patch));
@@ -21,6 +26,7 @@ describe("input validation", () => {
     ["no transactions array", { transactions: undefined }],
     ["amount as number", { transactions: [{ amount: 10, kind: "refund" }] }],
     ["missing order_id", { order_id: undefined }],
+    ["bad created_at", { created_at: "2026-13-01T00:00:00Z" }],
     ["mixed currencies", { transactions: [{ amount: "1.00", kind: "refund", currency: "BRL" }, { amount: "1.00", kind: "refund", currency: "USD" }] }],
   ])("refund: rejects %s with 422", async (_name, patch) => {
     const res = await createHarness().sendRefund(refund(patch));
@@ -36,6 +42,19 @@ describe("input validation", () => {
     const res = await h.sendRefund(refund({ transactions: [] }));
     expect(res).toMatchObject({ status: 200, body: { status: "ignored" } });
     expect(h.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM refunds")!.n).toBe(0);
+  });
+
+  it("accepts Shopify timestamps with offsets and fractions", async () => {
+    const h = createHarness();
+    const res = await h.sendOrder(order({ created_at: "2026-03-10T10:00:00.123-03:00" }));
+    expect(res.status).toBe(201);
+    expect((await h.get("/orders/1001")).body.order.created_at).toBe("2026-03-10T13:00:00.123Z");
+  });
+
+  it("a delivery id is scoped to its topic", async () => {
+    const h = createHarness();
+    await h.sendOrder(order(), "same-id");
+    expect((await h.sendRefund(refund(), "same-id")).body).toMatchObject({ status: "applied" });
   });
 
   it("a failed validation does not burn the delivery id", async () => {

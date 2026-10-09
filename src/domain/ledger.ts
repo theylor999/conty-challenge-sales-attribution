@@ -19,6 +19,7 @@ export interface RefundPlan {
   status: RefundOutcome;
   appliedCents: number;
   excessCents: number;
+  reason: "exceeds_remaining" | "nothing_left" | null;
 }
 
 /**
@@ -29,7 +30,8 @@ export function planRefund(remainingCents: number, requestedCents: number): Refu
   const appliedCents = Math.min(requestedCents, Math.max(remainingCents, 0));
   const excessCents = requestedCents - appliedCents;
   const status: RefundOutcome = excessCents === 0 ? "applied" : appliedCents === 0 ? "rejected" : "capped";
-  return { status, appliedCents, excessCents };
+  const reason = excessCents === 0 ? null : appliedCents === 0 ? "nothing_left" : "exceeds_remaining";
+  return { status, appliedCents, excessCents, reason };
 }
 
 export function summarize(entries: Iterable<LedgerEntry>): Totals {
