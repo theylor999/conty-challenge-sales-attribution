@@ -94,9 +94,10 @@ export class SalesService {
     const refunds = refundsForOrder(this.db, orderId);
     if (!order && refunds.length === 0) return null;
 
+    const ledger = ledgerForOrder(this.db, orderId);
     const base = {
-      totals: summarize(ledgerForOrder(this.db, orderId)),
-      ledger: ledgerForOrder(this.db, orderId),
+      totals: summarize(ledger),
+      ledger,
       refunds,
       pending_refunds: refunds.filter((refund) => refund.status === "pending"),
     };
