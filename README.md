@@ -2,18 +2,18 @@
 
 Recebe webhooks de pedido e de estorno no formato da Shopify, atribui cada venda a no máximo um criador e mantém um livro-razão (ledger) só de inserções. Estorno zera ou reduz a venda do criador sem apagar nada.
 
-Stack: Node 22+, TypeScript estrito, Hono, `node:sqlite`, vitest. Não precisa de Shopify real.
+Stack: Node 22.13+, TypeScript estrito, Hono, `node:sqlite`, vitest. Não precisa de Shopify real.
 
 ## Como rodar
 
 ```bash
 npm install
 npm run dev          # http://localhost:3000, banco em data/sales.db, criadores já semeados
-npm test             # 110 testes
+npm test             # 114 testes
 npm run typecheck
 ```
 
-Variáveis: `PORT` (3000), `DB_PATH` (`data/sales.db`, ou `:memory:`), `SHOPIFY_WEBHOOK_SECRET` (se definida, todo webhook precisa de `X-Shopify-Hmac-Sha256` válido; sem ela a checagem fica desligada).
+Variáveis: `PORT` (3000), `DB_PATH` (`data/sales.db`, ou `:memory:`), `SHOPIFY_WEBHOOK_SECRET` (se definida e não vazia, todo webhook precisa de `X-Shopify-Hmac-Sha256` válido; sem ela a checagem fica desligada).
 
 Criadores semeados (`src/seed.ts`):
 
@@ -27,7 +27,7 @@ Criadores semeados (`src/seed.ts`):
 
 | Rota | O que faz |
 |---|---|
-| `POST /webhooks/orders` | Ingere pedido (`201` novo, `200` repetido). Um pedido já conhecido só pode mudar para cancelado. |
+| `POST /webhooks/orders` | Ingere pedido (`201` novo, `200` repetido). Um pedido já conhecido não é somado de novo nem reatribuído; só o status financeiro e o cancelamento mudam. |
 | `POST /webhooks/refunds` | Ingere estorno (`201` aplicado/limitado/recusado, `202` pendente, `200` repetido). |
 | `GET /orders/:id` | Atribuição com evidência e conflitos, totais, ledger completo, estornos e pendentes. |
 | `GET /creators/:id/sales` | Bruto, estornado, revertido e líquido por moeda, mais a lista de pedidos. |
@@ -54,7 +54,7 @@ As UTMs vêm de `landing_site` (caminho ou URL completa); `note_attributes` só 
 | Ana | nenhuma | Ana | `coupon` | vazio |
 | desconhecido | Bia | Bia (o cupom fica na `evidence`) | `utm` | vazio |
 | nenhum | Bia | Bia | `utm` | vazio |
-| dois cupons, Caio e Ana | qualquer | Caio (primeiro da lista) | `coupon` | Caio e Ana |
+| dois cupons, Caio e Ana | qualquer | Caio (primeiro da lista) | `coupon` | Caio e Ana, mais o criador da UTM se houver |
 | nenhum | nenhuma | sem criador | `none` | vazio |
 
 `utm_content` e `utm_source` apontando para criadores diferentes: vence `utm_content`, conflito registrado.
@@ -74,14 +74,14 @@ Ids da Shopify de 64 bits passam de 2^53; o corpo é lido com esses ids como tex
 
 ## Ledger e estornos
 
-`ledger_entries` é só de inserção (triggers bloqueiam `UPDATE` e `DELETE`). Valores assinados: `sale` positivo, `refund` e `reversal` negativos. Líquido = soma dos lançamentos.
+`ledger_entries` é só de inserção (triggers bloqueiam `UPDATE`, `DELETE` e `INSERT OR REPLACE`). Valores assinados: `sale` não negativo (pedido grátis tem `sale` de 0), `refund` e `reversal` negativos. Líquido = soma dos lançamentos.
 
-- **Estorno parcial**: lança `refund` negativo; a `sale` continua lá. Várias transações `kind: "refund"` com `status` `success` (ou sem status) no mesmo estorno são somadas; outras são ignoradas. Estorno sem valor (só reposição de estoque) devolve `200 ignored`.
+- **Estorno parcial**: lança `refund` negativo; a `sale` continua lá. Várias transações `kind: "refund"` com `status` `success` (ou sem status) no mesmo estorno são somadas; outras são ignoradas. Estorno sem valor (só reposição de estoque) devolve `200 ignored` antes de qualquer registro; repetir essa entrega devolve `ignored` de novo.
 - **Estorno repetido**: mesmo `refund_id` não gera lançamento novo.
 - **Teto**: a soma dos estornos aplicados nunca passa do valor da venda. Estorno acima do saldo é aplicado só até o saldo (`status: capped`, `applied_cents`) e o excedente fica em `excess_cents` com `reason: exceeds_remaining`. Sem saldo, `status: rejected` com `reason: nothing_left`. Escolhi aplicar até o teto em vez de recusar tudo porque o estorno aconteceu de fato na loja, e o excedente continua rastreável. Um trigger no banco garante que o líquido do pedido nunca fica abaixo de zero.
 - **Estorno antes do pedido**: fica `pending` com `received_at` e aparece em `GET /orders/:id` (`status: awaiting_order`). Quando o pedido chega, os pendentes são aplicados na mesma transação, por `created_at` (não por ordem de chegada), respeitando o teto. O mesmo estorno chegando duas vezes antes do pedido vale uma vez.
 - **Moeda**: estorno em moeda diferente da do pedido é `rejected` com `reason: currency_mismatch`.
-- **Cancelamento**: pedido com `cancelled_at` ou `financial_status: voided`, na chegada ou em atualização posterior, ganha um `reversal` do que ainda sobra (uma vez só). Cancelado não volta a ativo por webhook velho. Estorno que chega depois do cancelamento fica `rejected` (nada sobrou).
+- **Cancelamento**: pedido com `cancelled_at` ou `financial_status: voided`, na chegada ou em atualização posterior, ganha um `reversal` do que ainda sobra, se sobrar algo (uma vez só). Cancelado não volta a ativo por webhook velho. Estorno que chega depois do cancelamento fica `rejected` (nada sobrou).
 - `financial_status: refunded` sozinho não move dinheiro. Os valores vêm do webhook de estorno.
 
 ## Exemplos reais
@@ -137,12 +137,12 @@ Bia (UTM do pedido 1001) não recebe nada: `GET /creators/cr_bia/sales` devolve 
 
 ## Testes
 
-`npm test` (110 testes, vitest, banco em memória, relógio injetado):
+`npm test` (114 testes, vitest, banco em memória, relógio injetado):
 
 - `attribution.test.ts`: a função pura, incluindo a tabela de desempate.
-- `orders.test.ts`: pedido duplicado (mesma entrega e entrega nova), rajada concorrente, desempate de ponta a ponta, sem sinal, atribuição congelada, cancelamento.
+- `orders.test.ts`: pedido duplicado (mesma entrega e entrega nova), rajada de entregas simultâneas num só processo, desempate de ponta a ponta, sem sinal, atribuição congelada, cancelamento.
 - `refunds.test.ts`: parcial, repetido, acima do teto, estorno antes do pedido (uma e duas vezes, ordem por `created_at`), totais do criador depois de tudo.
-- `db.test.ts`: o banco recusa segunda venda, estorno duplicado, líquido negativo, `UPDATE` e `DELETE` no ledger.
+- `db.test.ts`: o banco recusa segunda venda, estorno duplicado, líquido negativo, `UPDATE`, `DELETE` e `INSERT OR REPLACE` no ledger.
 - `http.test.ts`: validação (422/400), HMAC, 404.
 - `money.test.ts`, `ledger.test.ts`: parse exato e regras de teto.
 

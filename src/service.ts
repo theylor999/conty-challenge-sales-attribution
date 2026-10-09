@@ -153,8 +153,8 @@ export class SalesService {
     return { creator_id: creator.id, name: creator.name, totals, orders };
   }
 
-  // Same business key, new delivery. Nothing is re-added or re-attributed; the only
-  // effect is a first-time cancellation, which reverses what is still left.
+  // Same business key, new delivery. Nothing is re-added or re-attributed. The financial status
+  // follows the webhook until the order is cancelled; the first cancellation reverses what is left.
   private updateKnownOrder(existing: NonNullable<ReturnType<typeof findOrder>>, order: OrderInput, now: string): OrderResult {
     let cancelledNow = false;
     const alreadyCancelled = isCancelled({ cancelledAt: existing.cancelled_at, financialStatus: existing.financial_status });
